@@ -12,7 +12,7 @@ struct CalculatorBrain {
 	
 	let calculatorDidClearNotificationName = NSNotification.Name(rawValue: "calculatorDidClear")
 	
-	private var accumulator: Double?
+	private var accumulator: (Double, String)?
 	
 	private var pbo: PendingBinaryOperation?
 	
@@ -22,7 +22,11 @@ struct CalculatorBrain {
 		}
 	}
 	
-	var description: String?
+	var description: String? {
+		get {
+			return accumulator?.1
+		}
+	}
 	
 	private struct PendingBinaryOperation {
 		let function: (Double,Double) -> Double
@@ -60,14 +64,14 @@ struct CalculatorBrain {
 	
 	private mutating func performPendingBinaryOperation() {
 		if pbo != nil && accumulator != nil {
-			accumulator = pbo!.perform(with: accumulator!)
+			accumulator = (pbo!.perform(with: accumulator!.0), "new description")
 			pbo = nil
 		}
 	}
 	
 	private mutating func clear() {
 		accumulator = nil
-		description = nil
+		pbo = nil
 		
 		NotificationCenter.default.post(name: calculatorDidClearNotificationName, object: nil)
 	}
@@ -76,14 +80,18 @@ struct CalculatorBrain {
 		if let operation = operations[symbol] {
 			switch operation {
 			case .constant(let value):
-				accumulator = value
+				accumulator = (value, "new description")
 			case .unary(let function):
 				if accumulator != nil {
-					accumulator = function(accumulator!)
+					accumulator = (function(accumulator!.0), "new description")
 				}
 			case .binary(let function):
+				if resultIsPending {
+					performPendingBinaryOperation()
+				}
+				
 				if accumulator != nil {
-					pbo = PendingBinaryOperation(function: function, firstOperand: accumulator!)
+					pbo = PendingBinaryOperation(function: function, firstOperand: accumulator!.0)
 					accumulator = nil
 				}
 			case .equals:
@@ -95,12 +103,12 @@ struct CalculatorBrain {
 	}
 	
 	mutating func setOperant(_ operand: Double) {
-		accumulator = operand
+		accumulator = (operand, "new description")
 	}
 	
 	var result: Double? {
 		get {
-			return accumulator
+			return accumulator?.0
 		}
 	}
 }

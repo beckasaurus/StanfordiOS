@@ -25,15 +25,15 @@ class ViewController: UIViewController {
 	}
 	
 	var userHasStartedTyping = false
-	var userHasEnteredDecimal = false
 	
-	override func viewDidLoad() {
-		super .viewDidLoad()
+	override func viewWillAppear(_ animated: Bool) {
+		super.viewWillAppear(animated)
+		setToInitialValues()
 		observer = NotificationCenter.default.addObserver(forName: brain.calculatorDidClearNotificationName,
 		                                                  object: nil,
 		                                                  queue: OperationQueue.main,
 		                                                  using: { (_) in
-															self.displayValue = 0
+															self.setToInitialValues()
 		})
 	}
 	
@@ -44,15 +44,23 @@ class ViewController: UIViewController {
 		}
 	}
 	
+	func setToInitialValues() {
+		display.text = " "
+		userHasStartedTyping = false
+	}
+	
 	@IBAction func touchedButton(_ sender: UIButton) {
 		let digit = sender.currentTitle!
 		
-		if digit == "." {
-			if userHasEnteredDecimal {
+		if let displayText = display.text,
+			digit == "." {
+			if displayText.contains(".") {
 				return
 			}
 			
-			userHasEnteredDecimal = true
+			if !userHasStartedTyping { //first thing entered is a decimal
+				
+			}
 		}
 		
 		if userHasStartedTyping {
