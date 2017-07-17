@@ -14,6 +14,7 @@ class ViewController: UIViewController {
 	private var observer: NSObjectProtocol?
 	
 	@IBOutlet weak var display: UILabel!
+	@IBOutlet weak var descriptionLabel: UILabel!
 	
 	var displayValue: Double {
 		get {
@@ -47,6 +48,19 @@ class ViewController: UIViewController {
 	func setToInitialValues() {
 		display.text = " "
 		userHasStartedTyping = false
+		descriptionLabel.text = " "
+	}
+	
+	func updateDescription() {
+		if var description = brain.description {
+			if brain.resultIsPending {
+				description += " ... "
+			} else if brain.result != nil {
+				description += " = "
+			}
+			
+			descriptionLabel.text = description
+		}
 	}
 	
 	@IBAction func touchedButton(_ sender: UIButton) {
@@ -57,10 +71,6 @@ class ViewController: UIViewController {
 			if displayText.contains(".") {
 				return
 			}
-			
-			if !userHasStartedTyping { //first thing entered is a decimal
-				
-			}
 		}
 		
 		if userHasStartedTyping {
@@ -69,11 +79,13 @@ class ViewController: UIViewController {
 			display.text = digit
 			userHasStartedTyping = true
 		}
+		
+//		updateDescription()
 	}
 	
 	@IBAction func mathematicalOperation(_ sender: UIButton) {
 		if userHasStartedTyping {
-			brain.setOperant(displayValue)
+			brain.setOperand(displayValue)
 			userHasStartedTyping = false
 		}
 		
@@ -84,6 +96,8 @@ class ViewController: UIViewController {
 		if let result = brain.result {
 			displayValue = result
 		}
+		
+		updateDescription()
 	}
 }
 

@@ -38,33 +38,33 @@ struct CalculatorBrain {
 	}
 	
 	private enum Operation {
-		case constant(Double)
-		case unary((Double) -> Double)
-		case binary((Double, Double) -> Double)
+		case constant(Double, (String) -> String)
+		case unary((Double) -> Double, (String) -> String)
+		case binary((Double, Double) -> Double, (String) -> String)
 		case equals
 		case clear
 	}
 	
 	private var operations: Dictionary<String,Operation> = [
-		"π" : Operation.constant(Double.pi),
-		"e" : Operation.constant(M_E),
-		"±" : Operation.unary({-$0}),
-		"√" : Operation.unary(sqrt),
-		"x²" : Operation.unary({pow($0, 2)}),
-		"x³" : Operation.unary({pow($0, 3)}),
-		"1/x" : Operation.unary({1/$0}),
-		"+" : Operation.binary(+),
-		"-" : Operation.binary(-),
-		"*" : Operation.binary(*),
-		"/" : Operation.binary(/),
-		"%" : Operation.binary({$0.truncatingRemainder(dividingBy: $1)}),
+		"π" : Operation.constant(Double.pi, {$0 + "π "}),
+		"e" : Operation.constant(M_E, {$0 + "e "}),
+		"±" : Operation.unary({-$0}, {"±" + $0}),
+		"√" : Operation.unary(sqrt, {"√( \($0) )"}),
+		"x²" : Operation.unary({pow($0, 2)}, {$0 + "²"}),
+		"x³" : Operation.unary({pow($0, 3)}, {$0 + "³"}),
+		"1/x" : Operation.unary({1/$0}, {"1/(\($0))"}),
+		"+" : Operation.binary(+, {$0 + " + "}),
+		"-" : Operation.binary(-, {$0 + " - "}),
+		"*" : Operation.binary(*, {$0 + " * "}),
+		"/" : Operation.binary(/, {$0 + " / "}),
+		"%" : Operation.binary({$0.truncatingRemainder(dividingBy: $1)}, {$0 + " % "}),
 		"=" : Operation.equals,
 		"c" : Operation.clear
 	]
 	
-	private mutating func performPendingBinaryOperation() {
+	private mutating func performPendingBinaryOperation(descriptionFunction: (String)-> String) {
 		if pbo != nil && accumulator != nil {
-			accumulator = (pbo!.perform(with: accumulator!.0), "new description")
+			accumulator = (pbo!.perform(with: accumulator!.0), accumulator!.1)
 			pbo = nil
 		}
 	}
@@ -79,36 +79,37 @@ struct CalculatorBrain {
 	mutating func performOperation(_ symbol: String) {
 		if let operation = operations[symbol] {
 			switch operation {
-			case .constant(let value):
-				accumulator = (value, "new description")
-			case .unary(let function):
+			case .constant(let value, let descriptionFunction):
+				accumulator = (value, descriptionFunction(accumulator?.1 ?? ""))
+			case .unary(let function, let descriptionFunction):
 				if accumulator != nil {
-					accumulator = (function(accumulator!.0), "new description")
+					accumulator = (function(accumulator!.0), descriptionFunction(accumulator!.1))
 				}
-			case .binary(let function):
+			case .binary(let function, let descriptionFunction):
 				if resultIsPending {
-					performPendingBinaryOperation()
+					performPendingBinaryOperation(descriptionFunction: descriptionFunction)
 				}
 				
 				if accumulator != nil {
 					pbo = PendingBinaryOperation(function: function, firstOperand: accumulator!.0)
-					accumulator = nil
+					accumulator = (accumulator!.0, descriptionFunction(accumulator!.1))
 				}
 			case .equals:
-				performPendingBinaryOperation()
+				performPendingBinaryOperation(descriptionFunction: {_ in accumulator!.1})
 			case .clear:
 				clear()
 			}
 		}
 	}
 	
-	mutating func setOperant(_ operand: Double) {
-		accumulator = (operand, "new description")
+	mutating func setOperand(_ operand: Double) {
+		let newDescription = "\(accumulator?.1 ?? "")\(String(operand))"
+		accumulator = (operand, newDescription)
 	}
 	
 	var result: Double? {
 		get {
-			return accumulator?.0
+			return resultIsPending ? nil : accumulator?.0
 		}
 	}
 }
