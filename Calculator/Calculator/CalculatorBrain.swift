@@ -39,8 +39,8 @@ struct CalculatorBrain {
 	
 	private enum Operation {
 		case constant(Double, (String) -> String)
-		case unary((Double) -> Double, (String) -> String)
-		case binary((Double, Double) -> Double, (String) -> String)
+		case unary((Double) -> Double, ((Double, String), Bool) -> String)
+		case binary((Double, Double) -> Double, ((Double, String)) -> String)
 		case equals
 		case clear
 	}
@@ -48,23 +48,33 @@ struct CalculatorBrain {
 	private var operations: Dictionary<String,Operation> = [
 		"π" : Operation.constant(Double.pi, {$0 + "π "}),
 		"e" : Operation.constant(M_E, {$0 + "e "}),
-		"±" : Operation.unary({-$0}, {"±" + $0}),
-		"√" : Operation.unary(sqrt, {"√( \($0) )"}),
-		"x²" : Operation.unary({pow($0, 2)}, {$0 + "²"}),
-		"x³" : Operation.unary({pow($0, 3)}, {$0 + "³"}),
-		"1/x" : Operation.unary({1/$0}, {"1/(\($0))"}),
-		"+" : Operation.binary(+, {$0 + " + "}),
-		"-" : Operation.binary(-, {$0 + " - "}),
-		"*" : Operation.binary(*, {$0 + " * "}),
-		"/" : Operation.binary(/, {$0 + " / "}),
-		"%" : Operation.binary({$0.truncatingRemainder(dividingBy: $1)}, {$0 + " % "}),
+		
+		"±" : Operation.unary({-$0}, {accumulator, _ in "±" + accumulator.1 }),
+		"√" : Operation.unary(sqrt, { accumulator, resultIsPending in
+			if resultIsPending {
+				return "\(accumulator.1) √( \(accumulator.0) )"
+			} else {
+				return "√( \(accumulator.1) )"
+			}
+		}),
+		"x²" : Operation.unary({pow($0, 2)}, {"\($0.1) \($0.0)²"}),
+		"x³" : Operation.unary({pow($0, 3)}, {"\($0.1) \($0.0)³"}),
+		"1/x" : Operation.unary({1/$0}, {"\($0.1) 1/(\($0.0))"}),
+		
+		"+" : Operation.binary(+, {"\($0.1) + "}),
+		"-" : Operation.binary(-, {"\($0.1) - "}),
+		"*" : Operation.binary(*, {"\($0.1) * "}),
+		"/" : Operation.binary(/, {"\($0.1) / "}),
+		"%" : Operation.binary({$0.truncatingRemainder(dividingBy: $1)}, {"\($0.1) % "}),
+		
 		"=" : Operation.equals,
 		"c" : Operation.clear
 	]
 	
-	private mutating func performPendingBinaryOperation(descriptionFunction: (String)-> String) {
+	private mutating func performPendingBinaryOperation() {
 		if pbo != nil && accumulator != nil {
-			accumulator = (pbo!.perform(with: accumulator!.0), accumulator!.1)
+			let newValue = pbo!.perform(with: accumulator!.0)
+			accumulator = (newValue, "\(accumulator!.1)\(accumulator!.0)")
 			pbo = nil
 		}
 	}
@@ -82,20 +92,20 @@ struct CalculatorBrain {
 			case .constant(let value, let descriptionFunction):
 				accumulator = (value, descriptionFunction(accumulator?.1 ?? ""))
 			case .unary(let function, let descriptionFunction):
-				if accumulator != nil {
-					accumulator = (function(accumulator!.0), descriptionFunction(accumulator!.1))
+				if let unwrappedAccumulator = accumulator {
+					accumulator = (function(unwrappedAccumulator.0), descriptionFunction(unwrappedAccumulator, resultIsPending))
 				}
 			case .binary(let function, let descriptionFunction):
 				if resultIsPending {
-					performPendingBinaryOperation(descriptionFunction: descriptionFunction)
+					performPendingBinaryOperation()
 				}
 				
-				if accumulator != nil {
-					pbo = PendingBinaryOperation(function: function, firstOperand: accumulator!.0)
-					accumulator = (accumulator!.0, descriptionFunction(accumulator!.1))
+				if let unwrappedAccumulator = accumulator {
+					pbo = PendingBinaryOperation(function: function, firstOperand: unwrappedAccumulator.0)
+					accumulator = (unwrappedAccumulator.0, descriptionFunction(unwrappedAccumulator))
 				}
 			case .equals:
-				performPendingBinaryOperation(descriptionFunction: {_ in accumulator!.1})
+				performPendingBinaryOperation()
 			case .clear:
 				clear()
 			}
@@ -103,8 +113,15 @@ struct CalculatorBrain {
 	}
 	
 	mutating func setOperand(_ operand: Double) {
-		let newDescription = "\(accumulator?.1 ?? "")\(String(operand))"
-		accumulator = (operand, newDescription)
+		var description = "\(operand)"
+		if let accumulator = accumulator,
+			!resultIsPending { // for unary?
+			description = "\(accumulator.1)\(operand)"
+		} else if resultIsPending { //for binary?
+			description = accumulator!.1
+		}
+		
+		accumulator = (operand, description)
 	}
 	
 	var result: Double? {

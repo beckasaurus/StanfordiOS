@@ -79,8 +79,6 @@ class ViewController: UIViewController {
 			display.text = digit
 			userHasStartedTyping = true
 		}
-		
-//		updateDescription()
 	}
 	
 	@IBAction func mathematicalOperation(_ sender: UIButton) {
