@@ -24,23 +24,29 @@ struct CalculatorBrain {
 	
 	private var currentPrecedence: Precedence = .Max
 	
+	@available (*, deprecated: 1.0, message: "Use evalute(using) method instead.")
 	var resultIsPending: Bool {
-		get {
-			return pbo != nil
-		}
+		return evaluate(using: nil).isPending
 	}
 	
+	@available (*, deprecated: 1.0, message: "Use evalute(using) method instead.")
+	var result: Double? {
+		return evaluate(using: nil).result
+	}
+	
+	@available (*, deprecated: 1.0, message: "Use evalute(using) method instead.")
 	var description: String? {
-		get {
-			if resultIsPending {
-				//calculate what the description will be
-				//use an empty string if the accumulator and the description operand are the same (i.e. 7 + on the calculator would have 7 as the description operand and the accumulator.1 value)
-				//use the value of accumulator.1 if the description operand is different (i.e. 7 + 9 √ on the calculator would have √9 as the accumulator.1 value but 7 as the description operand)
-				return pbo!.description(with: pbo!.descriptionFirstOperand != accumulator!.1 ? accumulator!.1 : "")
-			} else {
-				return accumulator?.1
-			}
-		}
+//		get {
+//			if resultIsPending {
+//				//calculate what the description will be
+//				//use an empty string if the accumulator and the description operand are the same (i.e. 7 + on the calculator would have 7 as the description operand and the accumulator.1 value)
+//				//use the value of accumulator.1 if the description operand is different (i.e. 7 + 9 √ on the calculator would have √9 as the accumulator.1 value but 7 as the description operand)
+//				return pbo!.description(with: pbo!.descriptionFirstOperand != accumulator!.1 ? accumulator!.1 : "")
+//			} else {
+//				return accumulator?.1
+//			}
+//		}
+		return evaluate(using: nil).description
 	}
 	
 	private struct PendingBinaryOperation {
@@ -141,13 +147,16 @@ struct CalculatorBrain {
 		}
 	}
 	
+	func evaluate(using variables: Dictionary<String,Double>? = nil) -> (result: Double?, isPending: Bool, description: String) {
+		//assume value of zero if operand not found in dictionary
+		return (0, false, "")
+	}
+	
 	mutating func setOperand(_ operand: Double) {
 		accumulator = (operand, "\(operand)")
 	}
 	
-	var result: Double? {
-		get {
-			return accumulator?.0
-		}
+	func setOperand(variable named: String) {
+		
 	}
 }
