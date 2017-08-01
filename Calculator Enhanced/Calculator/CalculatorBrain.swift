@@ -12,29 +12,31 @@ struct CalculatorBrain {
 	
 	let calculatorDidClearNotificationName = NSNotification.Name(rawValue: "calculatorDidClear")
 	
-	private var accumulator: (Double, String)? {
-		didSet {
-			if !resultIsPending {
-				currentPrecedence = .Max
-			}
-		}
-	}
+	private var operationQueue = [Operation]()
 	
-	private var pbo: PendingBinaryOperation?
+//	private var pbo: PendingBinaryOperation?
 	
-	private var currentPrecedence: Precedence = .Max
+//	private var currentPrecedence: Precedence = .Max
 	
-	@available (*, deprecated: 1.0, message: "Use evalute(using) method instead.")
+//	private var accumulator: (Double, String)? {
+//		didSet {
+//			if !resultIsPending {
+//				currentPrecedence = .Max
+//			}
+//		}
+//	}
+	
+	@available (*, deprecated: 1.0, message: "Use evalute(using:) instead.")
 	var resultIsPending: Bool {
 		return evaluate(using: nil).isPending
 	}
 	
-	@available (*, deprecated: 1.0, message: "Use evalute(using) method instead.")
+	@available (*, deprecated: 1.0, message: "Use evalute(using:) instead.")
 	var result: Double? {
 		return evaluate(using: nil).result
 	}
 	
-	@available (*, deprecated: 1.0, message: "Use evalute(using) method instead.")
+	@available (*, deprecated: 1.0, message: "Use evalute(using:) instead.")
 	var description: String? {
 //		get {
 //			if resultIsPending {
@@ -69,7 +71,8 @@ struct CalculatorBrain {
 	}
 	
 	private enum Operation {
-		case constant(Double)
+		case constant(Double, String)
+		case variable(String)
 		case unary((Double) -> Double, (String) -> String)
 		case binary((Double, Double) -> Double, (String, String) -> String, Precedence)
 		case equals
@@ -77,8 +80,8 @@ struct CalculatorBrain {
 	}
 	
 	private var operations: Dictionary<String,Operation> = [
-		"π" : Operation.constant(Double.pi),
-		"e" : Operation.constant(M_E),
+		"π" : Operation.constant(Double.pi, "π"),
+		"e" : Operation.constant(M_E, "e"),
 		
 		"±" : Operation.unary({-$0}, { "-(\($0))"}),
 		"√" : Operation.unary(sqrt, { "√(\($0))"}),
@@ -96,67 +99,119 @@ struct CalculatorBrain {
 		"c" : Operation.clear
 	]
 	
-	private mutating func performPendingBinaryOperation() {
-		if pbo != nil && accumulator != nil {
-			let newResult = pbo!.perform(with: accumulator!.0)
-			let newDescription = pbo!.description(with: accumulator!.1)
-			accumulator = (newResult, newDescription)
-			pbo = nil
-		}
+	private func performPendingBinaryOperation(_ pbo: PendingBinaryOperation, accumulator: (Double?, Bool, String)) -> (Double?, Bool, String) {
+		guard let accumulatorValue = accumulator.0
+			else { return accumulator }
+		
+		let newResult = pbo.perform(with: accumulatorValue)
+		let newDescription = pbo.description(with: accumulator.2)
+		return (newResult, false, newDescription)
 	}
 	
 	private mutating func clear() {
-		accumulator = nil
-		pbo = nil
-		
+		operationQueue = []
 		NotificationCenter.default.post(name: calculatorDidClearNotificationName, object: nil)
 	}
+	
+	//MARK: Public API
 	
 	mutating func performOperation(_ symbol: String) {
 		if let operation = operations[symbol] {
 			switch operation {
-			
-			case .constant(let value):
-				accumulator = (value, symbol)
-			
-			case .unary(let resultFunction, let descriptionFunction):
-				if let unwrappedAccumulator = accumulator {
-					accumulator = (resultFunction(unwrappedAccumulator.0), descriptionFunction(unwrappedAccumulator.1))
-				}
-			
-			case .binary(let resultFunction, let descriptionFunction, let precedence):
-				performPendingBinaryOperation()
-				
-				if currentPrecedence.rawValue < precedence.rawValue,
-					let accumulatorUnwrapped = accumulator {
-					accumulator?.1 = "(\(accumulatorUnwrapped.1))"
-				}
-				
-				currentPrecedence = precedence
-				
-				if let unwrappedAccumulator = accumulator {
-					pbo = PendingBinaryOperation(resultFunction: resultFunction, firstOperand: unwrappedAccumulator.0, descriptionFunction: descriptionFunction, descriptionFirstOperand: unwrappedAccumulator.1)
-				}
-			
-			case .equals:
-				performPendingBinaryOperation()
-			
+//
+//			case .constant(let value):
+//				operationQueue.append(Operat)
+//				accumulator = (value, symbol)
+//				
+//			case .variable(let variable):
+//				let value = variables[variable] ?? 0
+//				accumulator = (value, symbol)
+//			
+//			case .unary(let resultFunction, let descriptionFunction):
+//				if let unwrappedAccumulator = accumulator {
+//					accumulator = (resultFunction(unwrappedAccumulator.0), descriptionFunction(unwrappedAccumulator.1))
+//				}
+//			
+//			case .binary(let resultFunction, let descriptionFunction, let precedence):
+//				performPendingBinaryOperation()
+//				
+//				if currentPrecedence.rawValue < precedence.rawValue,
+//					let accumulatorUnwrapped = accumulator {
+//					accumulator?.1 = "(\(accumulatorUnwrapped.1))"
+//				}
+//				
+//				currentPrecedence = precedence
+//				
+//				if let unwrappedAccumulator = accumulator {
+//					pbo = PendingBinaryOperation(resultFunction: resultFunction, firstOperand: unwrappedAccumulator.0, descriptionFunction: descriptionFunction, descriptionFirstOperand: unwrappedAccumulator.1)
+//				}
+//			
+//			case .equals:
+//				performPendingBinaryOperation()
+//			
 			case .clear:
 				clear()
+			default:
+				operationQueue.append(operation)
 			}
 		}
 	}
 	
 	func evaluate(using variables: Dictionary<String,Double>? = nil) -> (result: Double?, isPending: Bool, description: String) {
-		//assume value of zero if operand not found in dictionary
-		return (0, false, "")
+		
+		var accumulator: (Double?, Bool, String) = (result: nil, isPending: false, description: "")
+		var pbo: PendingBinaryOperation?
+		var currentPrecedence: Precedence = .Max
+		
+		for operation in operationQueue {
+			switch operation {
+			
+			case .constant(let value, let description):
+				accumulator = (value, false, description)
+			
+			case .variable(let variableName):				
+				let variableValue = variables?[variableName] ?? 0
+				accumulator = (variableValue, false, variableName)
+			
+			case .unary(let resultFunction, let descriptionFunction):
+				guard let previousResult = accumulator.0
+					else {continue} // we need one operand
+				
+				accumulator = (resultFunction(previousResult), accumulator.1, descriptionFunction(accumulator.2))
+			
+			case .binary(let resultFunction, let descriptionFunction, let precedence):
+				if let pbo = pbo {
+					accumulator = performPendingBinaryOperation(pbo, accumulator: accumulator)
+				}
+				
+				guard let previousResult = accumulator.0
+					else { continue } // we need a previous operand
+				
+				if currentPrecedence.rawValue < precedence.rawValue {
+					accumulator.2 = "(\(accumulator.2))"
+				}
+				
+				currentPrecedence = precedence
+				
+				pbo = PendingBinaryOperation(resultFunction: resultFunction, firstOperand: previousResult, descriptionFunction: descriptionFunction, descriptionFirstOperand: accumulator.2)
+				accumulator.1 = true
+			
+			case .equals:
+				continue
+			
+			default:
+				continue
+			}
+		}
+		
+		return accumulator
 	}
 	
 	mutating func setOperand(_ operand: Double) {
-		accumulator = (operand, "\(operand)")
+		operationQueue.append(Operation.constant(operand, String(operand)))
 	}
 	
-	func setOperand(variable named: String) {
-		
+	mutating func setOperand(variable named: String) {
+		operationQueue.append(Operation.variable(named))
 	}
 }
